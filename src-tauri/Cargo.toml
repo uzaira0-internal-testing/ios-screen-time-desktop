@@ -1,0 +1,26 @@
+[package]
+name = "ios-screen-time"
+version = "0.5.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "iOS Screen Time Screenshot Processing desktop app"
+
+[workspace]
+
+[lib]
+name = "ios_screen_time"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
+serde_json = "1"
+
+[features]
+devtools = ["tauri/devtools"]
