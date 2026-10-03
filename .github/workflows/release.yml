@@ -158,7 +158,7 @@ jobs:
           echo "path=$dmg" >> "$GITHUB_OUTPUT"
           if [[ "$IS_TAG" == true ]]; then
             asset="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name | select(endswith(".dmg"))')"
-            [[ $(wc -l <<< "$asset") == 1 && -n "$asset" ]] || { echo "::error::expected one .dmg asset, found: $asset"; exit 1; }
+            [[ -n "$asset" && "$asset" != *$'\n'* ]] || { echo "::error::expected one .dmg asset, found: $asset"; exit 1; }
             cp "$dmg" "$RUNNER_TEMP/$asset"
             gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/$asset" --clobber
           fi
