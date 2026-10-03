@@ -83,37 +83,6 @@
       ]
     }
   ],
-  "share_target": {
-    "action": "/share",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "files": [
-        {
-          "name": "screenshots",
-          "accept": [
-            "image/png",
-            "image/jpeg",
-            "image/jpg"
-          ]
-        }
-      ]
-    }
-  },
-  "file_handlers": [
-    {
-      "action": "/open",
-      "accept": {
-        "image/png": [
-          ".png"
-        ],
-        "image/jpeg": [
-          ".jpg",
-          ".jpeg"
-        ]
-      }
-    }
-  ],
   "launch_handler": {
     "client_mode": "focus-existing"
   },

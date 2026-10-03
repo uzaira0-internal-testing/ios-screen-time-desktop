@@ -36,6 +36,67 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - name: macOS signing
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          REQUIRE_SIGNING: ${{ github.ref_type == 'tag' }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          put() { printf '%s<<__SIGNING_EOF__\n%s\n__SIGNING_EOF__\n' "$1" "$2" >> "$GITHUB_ENV"; }
+          if [[ -z "$APPLE_CERTIFICATE" ]]; then
+            [[ "$REQUIRE_SIGNING" != true ]] || { echo "::error::APPLE_CERTIFICATE is required to release"; exit 1; }
+            echo "::warning::APPLE_CERTIFICATE is not set; the macOS build is unsigned"
+            exit 0
+          fi
+          put APPLE_CERTIFICATE "$APPLE_CERTIFICATE"
+          put APPLE_CERTIFICATE_PASSWORD "$APPLE_CERTIFICATE_PASSWORD"
+          [[ -z "$APPLE_SIGNING_IDENTITY" ]] || put APPLE_SIGNING_IDENTITY "$APPLE_SIGNING_IDENTITY"
+          if [[ -n "$APPLE_API_KEY" && -n "$APPLE_API_ISSUER" && -n "$APPLE_API_PRIVATE_KEY" ]]; then
+            key="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+            printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$key"
+            chmod 600 "$key"
+            put APPLE_API_KEY "$APPLE_API_KEY"
+            put APPLE_API_ISSUER "$APPLE_API_ISSUER"
+            put APPLE_API_KEY_PATH "$key"
+          elif [[ -n "$APPLE_ID" && -n "$APPLE_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
+            put APPLE_ID "$APPLE_ID"
+            put APPLE_PASSWORD "$APPLE_PASSWORD"
+            put APPLE_TEAM_ID "$APPLE_TEAM_ID"
+          else
+            [[ "$REQUIRE_SIGNING" != true ]] || { echo "::error::notarization credentials are required to release"; exit 1; }
+            echo "::warning::no notarization credentials; the macOS build is signed but not notarized"
+          fi
+      - name: Windows signing
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          REQUIRE_SIGNING: ${{ github.ref_type == 'tag' }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            if ($env:REQUIRE_SIGNING -eq 'true') { Write-Output '::error::WINDOWS_CERTIFICATE is required to release'; exit 1 }
+            Write-Output '::warning::WINDOWS_CERTIFICATE is not set; the Windows build is unsigned'
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          $conf = @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } }
+          $conf | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM src-tauri/tauri.windows.conf.json
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
