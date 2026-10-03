@@ -1,9 +1,24 @@
 mod pipeline;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
-use tauri::Manager;
 use tauri::http::{Method, Response, StatusCode, header};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_window_state::StateFlags;
+
+struct Ready(AtomicBool);
+
+#[tauri::command]
+fn app_ready(window: tauri::WebviewWindow, ready: tauri::State<'_, Ready>) {
+    if !ready.0.swap(true, Ordering::SeqCst) {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -13,11 +28,21 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
                 let _ = window.set_focus();
             }
         }))
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                .build(),
+        )
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(prevent_browser_shortcuts())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry>::new("desktop-memory")
                 .js_init_script(memory)
@@ -50,10 +75,27 @@ pub fn run() {
                 responder.respond(response);
             });
         })
+        .manage(Ready(AtomicBool::new(false)))
+        .invoke_handler(tauri::generate_handler![app_ready])
+        .on_menu_event(|app, event| {
+            if event.id() == "quit" {
+                match app.get_webview_window("main") {
+                    Some(window) => {
+                        let _ = window.close();
+                    }
+                    None => app.exit(0),
+                }
+                return;
+            }
+            let _ = app.emit("menu", event.id().as_ref());
+        })
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
+            #[cfg(target_os = "macos")]
+            app.set_menu(app_menu(app.handle())?)?;
+            startup_watchdog(app.handle().clone());
             if let Some(pool) = native_pool(app) {
                 app.manage(Arc::new(pool));
             }
@@ -61,6 +103,93 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn prevent_browser_shortcuts<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use tauri_plugin_prevent_default::Flags;
+    let mut flags = Flags::all() - Flags::CONTEXT_MENU - Flags::FOCUS_MOVE;
+    if cfg!(debug_assertions) {
+        flags -= Flags::DEV_TOOLS | Flags::RELOAD;
+    }
+    let builder = tauri_plugin_prevent_default::Builder::new().with_flags(flags);
+    #[cfg(windows)]
+    let builder = builder.platform(
+        tauri_plugin_prevent_default::PlatformOptions::new()
+            .browser_accelerator_keys(cfg!(debug_assertions))
+            .general_autofill(false)
+            .password_autosave(false)
+            .swipe_navigation(false),
+    );
+    builder.build()
+}
+
+#[cfg(target_os = "macos")]
+fn app_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
+    let menu = Menu::default(app)?;
+    if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
+        let updates = MenuItem::with_id(
+            app,
+            "check-updates",
+            "Check for Updates…",
+            true,
+            None::<&str>,
+        )?;
+        let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+        app_menu.insert(&updates, 1)?;
+        app_menu.insert(&settings, 3)?;
+        app_menu.insert(&PredefinedMenuItem::separator(app)?, 4)?;
+        let last = app_menu.items()?.len().saturating_sub(1);
+        app_menu.remove_at(last)?;
+        let quit = format!("Quit {}", app.package_info().name);
+        app_menu.append(&MenuItem::with_id(
+            app,
+            "quit",
+            quit,
+            true,
+            Some("CmdOrCtrl+Q"),
+        )?)?;
+    }
+    Ok(menu)
+}
+
+fn startup_watchdog(app: AppHandle) {
+    std::thread::spawn(move || {
+        let ready = || app.state::<Ready>().0.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_secs(5));
+        if ready() {
+            return;
+        }
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+        }
+        std::thread::sleep(Duration::from_secs(25));
+        if ready() {
+            return;
+        }
+        let Ok(updater) = app.updater() else { return };
+        let Ok(Some(update)) = tauri::async_runtime::block_on(updater.check()) else {
+            return;
+        };
+        let install = app
+            .dialog()
+            .message(format!(
+                "The app did not finish starting. Version {} is available and may fix this.",
+                update.version
+            ))
+            .title("Update available")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Install and Restart".into(),
+                "Not Now".into(),
+            ))
+            .blocking_show();
+        if install
+            && tauri::async_runtime::block_on(update.download_and_install(|_, _| {}, || {})).is_ok()
+        {
+            app.restart();
+        }
+    });
 }
 
 fn native_pool(app: &tauri::App) -> Option<pipeline::Pool> {

@@ -1,6 +1,6 @@
 {
   "productName": "iOS Screen Time Screenshot Processor",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "identifier": "com.ios-screentime.desktop",
   "build": {
     "frontendDist": "../dist"
@@ -8,10 +8,16 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "iOS Screen Time Screenshot Processor",
         "width": 1400,
         "height": 900,
-        "dragDropEnabled": false
+        "minWidth": 1024,
+        "minHeight": 700,
+        "center": true,
+        "visible": false,
+        "backgroundColor": "#ffffff",
+        "allowLinkPreview": false
       }
     ],
     "security": {
@@ -37,12 +43,28 @@
       "deb",
       "appimage"
     ],
+    "publisher": "Uzair Alam",
+    "copyright": "© 2026 Uzair Alam",
+    "category": "Productivity",
+    "license": "AGPL-3.0-or-later",
+    "homepage": "https://github.com/uzaira0-internal-testing/ios-screen-time-desktop",
+    "shortDescription": "Reads hourly usage from iOS Screen Time and Battery screenshots",
+    "longDescription": "Reads iOS Screen Time and Battery screenshots into 24 hourly values, with review and correction, and exports them as CSV or JSON. Screenshots are processed on this computer and are never uploaded.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.png",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.3"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      }
+    }
   }
 }

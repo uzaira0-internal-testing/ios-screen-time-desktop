@@ -1,0 +1,2 @@
+function j(b){try{localStorage.setItem("wasm_workspace_import_in_progress",JSON.stringify({startedAt:new Date().toISOString(),source:b}))}catch{}}function q(){try{localStorage.removeItem("wasm_workspace_import_in_progress")}catch{}}function x(){try{let b=localStorage.getItem("wasm_workspace_import_in_progress");if(!b)return null;let g=JSON.parse(b);if(typeof g?.startedAt!=="string")return null;return{startedAt:g.startedAt,source:g.source??"unknown"}}catch{return null}}
+export{j,q as k,x as l};
