@@ -1,0 +1,5 @@
+- Settings → About lists the open-source software in the app and its licenses.
+- Settings → Privacy can turn off the automatic update checks. Check for Updates… in the app menu still works.
+- "Delete all local data" now also forgets the last import folder and the update-check choice.
+- The OCR results table names its two status columns apart (Status and Result), and notifications no longer cover the header buttons.
+- Settings → About names the web engine correctly.

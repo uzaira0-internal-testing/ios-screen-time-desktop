@@ -1,1 +1,0 @@
-import{$f as e,Xf as a,Yf as b,Zf as c,_f as d,ag as f,bg as g,cg as h,dg as i,eg as j,fg as k}from"./chunk-d4mbt7sr.js";import"./chunk-03vvj754.js";export{b as transformCallback,g as requestPermissions,k as isTauri,h as invoke,i as convertFileSrc,f as checkPermissions,e as addPluginListener,a as SERIALIZE_TO_IPC_FN,j as Resource,d as PluginListener,c as Channel};

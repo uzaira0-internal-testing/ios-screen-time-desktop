@@ -28,17 +28,60 @@ jobs:
             targets: ""
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - if: matrix.os == 'ubuntu-22.04'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - uses: dtolnay/rust-toolchain@master
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
         with:
           toolchain: 1.94.1
           targets: ${{ matrix.targets }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
       - run: npm ci
+      - name: Build the launch check
+        run: npm run tauri -- build --no-bundle --features background-test
+      - name: Launch check
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/launch.log"
+          app=src-tauri/target/release/ios-screen-time
+          if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "$app" 2> "$log" & else "$app" 2> "$log" & fi
+          pid=$!
+          for _ in $(seq 120); do
+            grep -qx app_ready "$log" && break
+            kill -0 "$pid" 2> /dev/null || break
+            sleep 1
+          done
+          pkill -x ios-screen-time || true
+          kill "$pid" 2> /dev/null || true
+          grep -qx app_ready "$log" || { cat "$log"; echo "::error::the app did not finish loading"; exit 1; }
+          echo "the app loaded"
+      - name: Launch check
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $log = Join-Path $env:RUNNER_TEMP 'launch.log'
+          $out = Join-Path $env:RUNNER_TEMP 'launch.out'
+          $p = Start-Process -FilePath 'src-tauri\target\release\ios-screen-time.exe' -RedirectStandardError $log -RedirectStandardOutput $out -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 120; $i++) {
+            Start-Sleep -Seconds 1
+            if ((Test-Path $log) -and (Select-String -Quiet -Path $log -Pattern '^app_ready$' -ErrorAction SilentlyContinue)) { $ok = $true; break }
+            if ($p.HasExited) { break }
+          }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          if (-not $ok) { Get-Content $log -ErrorAction SilentlyContinue; Write-Output '::error::the app did not finish loading'; exit 1 }
+          Write-Output 'the app loaded'
+      - name: Release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          { echo 'body<<__NOTES_EOF__'; cat RELEASE_NOTES.txt; echo '__NOTES_EOF__'; } >> "$GITHUB_OUTPUT"
       - name: macOS signing
         if: runner.os == 'macOS'
         shell: bash
@@ -123,7 +166,7 @@ jobs:
           $conf = @{ bundle = @{ windows = @{ signCommand = @{ cmd = $signtool.FullName; args = $signArgs } } } }
           $conf | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8NoBOM src-tauri/tauri.windows.conf.json
           'WINDOWS_SIGNED=true' | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-      - uses: tauri-apps/tauri-action@v1
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -131,6 +174,7 @@ jobs:
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
           args: ${{ matrix.args }}
       - name: Notarize the disk image
@@ -164,7 +208,7 @@ jobs:
           fi
       - name: Replace the disk image artifact
         if: steps.dmg.outputs.path != '' && github.ref_type != 'tag'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: darwin-universal-dmg
           path: ${{ steps.dmg.outputs.path }}
@@ -196,7 +240,7 @@ jobs:
           }
       - name: Attest build provenance
         if: github.event.repository.visibility == 'public'
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |
             src-tauri/target/**/release/bundle/dmg/*.dmg

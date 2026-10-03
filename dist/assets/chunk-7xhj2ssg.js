@@ -1,1 +1,0 @@
-import{cg as b}from"./chunk-d4mbt7sr.js";import"./chunk-03vvj754.js";async function z(j=0){await b("plugin:process|exit",{code:j})}async function B(){await b("plugin:process|restart")}export{B as relaunch,z as exit};

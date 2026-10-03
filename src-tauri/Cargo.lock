@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "ios-screen-time"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "serde_json",
  "tauri",

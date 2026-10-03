@@ -1,0 +1,1 @@
+import{dg as b}from"./chunk-nfs875wp.js";import"./chunk-cas02g56.js";async function z(j=0){await b("plugin:process|exit",{code:j})}async function B(){await b("plugin:process|restart")}export{B as relaunch,z as exit};
