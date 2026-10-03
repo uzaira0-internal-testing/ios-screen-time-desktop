@@ -1,6 +1,6 @@
 {
   "productName": "iOS Screen Time Screenshot Processor",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "identifier": "com.ios-screentime.desktop",
   "build": {
     "frontendDist": "../dist"
@@ -59,12 +59,6 @@
     ],
     "macOS": {
       "minimumSystemVersion": "13.3"
-    },
-    "windows": {
-      "webviewInstallMode": {
-        "type": "offlineInstaller",
-        "silent": true
-      }
     }
   }
 }
