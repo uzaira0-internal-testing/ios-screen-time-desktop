@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -132,6 +133,42 @@ jobs:
           releaseName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
           args: ${{ matrix.args }}
+      - name: Notarize the disk image
+        id: dmg
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_TAG: ${{ github.ref_type == 'tag' }}
+        run: |
+          set -euo pipefail
+          dmg="$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)"
+          if [[ -n "${APPLE_API_KEY_PATH:-}" ]]; then
+            xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
+          elif [[ -n "${APPLE_ID:-}" ]]; then
+            xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          else
+            [[ "$IS_TAG" != true ]] || { echo "::error::notarization credentials are required to release"; exit 1; }
+            echo "::warning::the disk image is signed but not notarized"
+            exit 0
+          fi
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          spctl -a -t open --context context:primary-signature -vv "$dmg"
+          echo "path=$dmg" >> "$GITHUB_OUTPUT"
+          if [[ "$IS_TAG" == true ]]; then
+            asset="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name | select(endswith(".dmg"))')"
+            [[ $(wc -l <<< "$asset") == 1 && -n "$asset" ]] || { echo "::error::expected one .dmg asset, found: $asset"; exit 1; }
+            cp "$dmg" "$RUNNER_TEMP/$asset"
+            gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/$asset" --clobber
+          fi
+      - name: Replace the disk image artifact
+        if: steps.dmg.outputs.path != '' && github.ref_type != 'tag'
+        uses: actions/upload-artifact@v7
+        with:
+          name: darwin-universal-dmg
+          path: ${{ steps.dmg.outputs.path }}
+          overwrite: true
       - name: Verify Windows signatures
         if: runner.os == 'Windows' && env.WINDOWS_SIGNED == 'true'
         shell: pwsh
@@ -144,3 +181,14 @@ jobs:
             if ($sig.Status -ne 'Valid') { throw "$($file.Name): $($sig.Status) $($sig.StatusMessage)" }
             Write-Output "$($file.Name): $($sig.SignerCertificate.Subject)"
           }
+      - name: Attest build provenance
+        if: github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/**/release/bundle/nsis/*.exe
+            src-tauri/target/**/release/bundle/msi/*.msi
+            src-tauri/target/**/release/bundle/deb/*.deb
+            src-tauri/target/**/release/bundle/appimage/*.AppImage
