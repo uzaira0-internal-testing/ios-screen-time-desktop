@@ -1,5 +1,5 @@
 {
-  "name": "iOS Screen Time Screenshot Processing",
+  "name": "iOS Screen Time Screenshot Processor",
   "short_name": "iOS Screen Time",
   "description": "Extract and analyze battery and screen time usage data from iOS screenshots — fully local OCR, no uploads.",
   "start_url": "/",
@@ -40,14 +40,14 @@
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "iOS Screen Time — Desktop View"
+      "label": "iOS Screen Time Screenshot Processor — desktop view"
     },
     {
       "src": "/screenshots/mobile-750x1334.png",
       "sizes": "750x1334",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "iOS Screen Time — Mobile View"
+      "label": "iOS Screen Time Screenshot Processor — mobile view"
     }
   ],
   "categories": [

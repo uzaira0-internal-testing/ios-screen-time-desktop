@@ -1,6 +1,6 @@
 {
-  "productName": "iOS Screen Time",
-  "version": "0.5.1",
+  "productName": "iOS Screen Time Screenshot Processor",
+  "version": "0.5.2",
   "identifier": "com.ios-screentime.desktop",
   "build": {
     "frontendDist": "../dist"
@@ -8,9 +8,10 @@
   "app": {
     "windows": [
       {
-        "title": "iOS Screen Time",
+        "title": "iOS Screen Time Screenshot Processor",
         "width": 1400,
-        "height": 900
+        "height": 900,
+        "dragDropEnabled": false
       }
     ],
     "security": {
