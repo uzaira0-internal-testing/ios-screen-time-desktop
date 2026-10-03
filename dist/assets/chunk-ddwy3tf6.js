@@ -1,2 +1,0 @@
-import{tc as a}from"./chunk-42saqjy4.js";import{Qd as e}from"./chunk-c2803tzc.js";function i({className:r,width:t,height:o,circle:n}){return e("div",{className:a("animate-pulse bg-eq-surface-muted rounded-eq-sm",n&&"rounded-full",r),style:{width:t??"100%",height:o??"1rem"}})}function d({count:r=1,...t}){if(r===1)return e(i,{...t});return e("div",{className:"space-y-2",children:Array.from({length:r},(o,n)=>e(i,{...t},n))})}
-export{d as qb};

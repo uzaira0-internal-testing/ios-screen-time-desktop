@@ -177,6 +177,16 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
           args: ${{ matrix.args }}
+      - name: Attach the source code
+        if: runner.os == 'Linux' && github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          name="ios-screen-time-source-${GITHUB_REF_NAME#v}.tar.gz"
+          cp source/ios-screen-time-source.tar.gz "$RUNNER_TEMP/$name"
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/$name" --clobber
       - name: Notarize the disk image
         id: dmg
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''

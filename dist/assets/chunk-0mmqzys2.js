@@ -1,0 +1,1 @@
+import{dg as q}from"./chunk-nfs875wp.js";import"./chunk-cas02g56.js";async function B(b,j){await q("plugin:opener|open_url",{url:b,with:j})}async function C(b,j){await q("plugin:opener|open_path",{path:b,with:j})}async function E(b){return q("plugin:opener|reveal_item_in_dir",{paths:typeof b==="string"?[b]:b})}export{E as revealItemInDir,B as openUrl,C as openPath};

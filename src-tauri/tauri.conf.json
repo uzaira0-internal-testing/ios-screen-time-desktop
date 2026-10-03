@@ -1,6 +1,6 @@
 {
   "productName": "iOS Screen Time Screenshot Processor",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "identifier": "com.ios-screentime.desktop",
   "build": {
     "frontendDist": "../dist"

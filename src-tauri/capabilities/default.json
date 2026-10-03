@@ -21,6 +21,14 @@
     "fs:allow-read-dir",
     "fs:allow-read-file",
     "fs:allow-write-file",
-    "notification:default"
+    "notification:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/uzaira0-internal-testing/ios-screen-time-desktop/*"
+        }
+      ]
+    }
   ]
 }

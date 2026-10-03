@@ -58,9 +58,14 @@ gh attestation verify <file> --repo uzaira0-internal-testing/ios-screen-time-des
 ## Licenses
 
 The app is licensed under the GNU Affero General Public License v3.0 or later.
-It includes open-source software from other projects, among them Tesseract,
-Leptonica, Tauri and React; their licenses are listed in the app under
-**Settings → About → Third-party licenses**.
+Each release has its full source code attached as
+`ios-screen-time-source-<version>.tar.gz` (Settings → About links to the one
+for your version). Test screenshots taken from real devices, and data recorded
+from them, are left out; the archive's `SOURCE-EXPORT.txt` lists what.
+
+The app includes open-source software from other projects, among them
+Tesseract, Leptonica, Tauri and React; their licenses are listed in the app
+under **Settings → About → Third-party licenses**.
 
 ## Problems
 
