@@ -19,7 +19,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGODdCNDc5NTkwQzAxMjUKUldRbEFReFplYlNIajlaaFhBY3pScjNtNmtHZWMxS2thNDdUWDRLc3lFSzVzOGo0MFVwb1BOSGsK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYwMUIyOUJENjNDNEYzNjQKUldSazg4Ump2U2tiWUh3em1kU205cXlWMmp6MkNOOXE4N1BQVytWSVJSb0lDNk9xbE5kbnZVK1oK",
       "endpoints": [
         "https://github.com/uzaira0-internal-testing/ios-screen-time-desktop/releases/latest/download/latest.json"
       ]
