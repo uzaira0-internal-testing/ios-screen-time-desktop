@@ -12,10 +12,19 @@ use tauri_plugin_window_state::StateFlags;
 
 struct Ready(AtomicBool);
 
+const SHOW_WINDOW: bool = !cfg!(feature = "background-test");
+
 #[tauri::command]
 fn app_ready(window: tauri::WebviewWindow, ready: tauri::State<'_, Ready>) {
-    if !ready.0.swap(true, Ordering::SeqCst) {
+    if ready.0.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if cfg!(feature = "background-test") {
+        eprintln!("app_ready");
+    }
+    if SHOW_WINDOW {
         let _ = window.show();
+        #[cfg(not(target_os = "macos"))]
         let _ = window.set_focus();
     }
 }
@@ -25,7 +34,10 @@ pub fn run() {
     let memory = pipeline::memory_gb()
         .map(|gb| format!("window.__DESKTOP_MEMORY_GB__ = {gb};"))
         .unwrap_or_default();
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.activate_ignoring_other_apps(false);
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -160,7 +172,7 @@ fn startup_watchdog(app: AppHandle) {
         if ready() {
             return;
         }
-        if let Some(window) = app.get_webview_window("main") {
+        if let Some(window) = app.get_webview_window("main").filter(|_| SHOW_WINDOW) {
             let _ = window.show();
         }
         std::thread::sleep(Duration::from_secs(25));
