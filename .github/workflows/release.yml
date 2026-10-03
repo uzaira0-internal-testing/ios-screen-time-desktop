@@ -174,12 +174,25 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $files = @(Get-ChildItem src-tauri/target/release -File -Filter '*.exe') + @(Get-ChildItem src-tauri/target/release/bundle -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' })
-          if ($files.Count -lt 3) { throw "expected the app and both installers, found $($files.Count) files" }
-          foreach ($file in $files) {
-            $sig = Get-AuthenticodeSignature -FilePath $file.FullName
-            if ($sig.Status -ne 'Valid') { throw "$($file.Name): $($sig.Status) $($sig.StatusMessage)" }
-            Write-Output "$($file.Name): $($sig.SignerCertificate.Subject)"
+          function Assert-Signed($path) {
+            $sig = Get-AuthenticodeSignature -FilePath $path
+            if ($sig.Status -ne 'Valid') { throw "$path`: $($sig.Status) $($sig.StatusMessage)" }
+            Write-Output "$(Split-Path -Leaf $path): $($sig.SignerCertificate.Subject)"
+          }
+          $bundle = 'src-tauri/target/release/bundle'
+          $nsis = @(Get-ChildItem "$bundle/nsis" -Filter '*.exe')
+          $msi = @(Get-ChildItem "$bundle/msi" -Filter '*.msi')
+          if ($nsis.Count -ne 1 -or $msi.Count -ne 1) { throw "expected one NSIS and one MSI installer, found $($nsis.Count) and $($msi.Count)" }
+          Assert-Signed $nsis[0].FullName
+          Assert-Signed $msi[0].FullName
+          $out = Join-Path $env:RUNNER_TEMP 'unpacked'
+          7z x $nsis[0].FullName "-o$out/nsis" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7z could not unpack $($nsis[0].Name)" }
+          Start-Process msiexec.exe -Wait -NoNewWindow -ArgumentList @('/a', "`"$($msi[0].FullName)`"", '/qn', "TARGETDIR=`"$out\msi`"")
+          foreach ($kind in 'nsis', 'msi') {
+            $apps = @(Get-ChildItem "$out/$kind" -Recurse -File -Filter 'ios-screen-time.exe')
+            if ($apps.Count -lt 1) { throw "no ios-screen-time.exe inside the $kind installer" }
+            foreach ($app in $apps) { Write-Output "$kind payload:"; Assert-Signed $app.FullName }
           }
       - name: Attest build provenance
         if: github.event.repository.visibility == 'public'
