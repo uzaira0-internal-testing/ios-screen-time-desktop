@@ -48,16 +48,16 @@ jobs:
           set -euo pipefail
           log="$RUNNER_TEMP/launch.log"
           app=src-tauri/target/release/ios-screen-time
-          if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "$app" 2> "$log" & else "$app" 2> "$log" & fi
+          if [[ "$RUNNER_OS" == Linux ]]; then NO_AT_BRIDGE=1 xvfb-run -a "$app" > "$log" 2>&1 & else "$app" > "$log" 2>&1 & fi
           pid=$!
           for _ in $(seq 120); do
-            grep -qx app_ready "$log" && break
+            grep -q "^app_ready" "$log" && break
             kill -0 "$pid" 2> /dev/null || break
             sleep 1
           done
           pkill -x ios-screen-time || true
           kill "$pid" 2> /dev/null || true
-          grep -qx app_ready "$log" || { cat "$log"; echo "::error::the app did not finish loading"; exit 1; }
+          grep -q "^app_ready" "$log" || { cat "$log"; echo "::error::the app did not finish loading"; exit 1; }
           echo "the app loaded"
       - name: Launch check
         if: runner.os == 'Windows'
