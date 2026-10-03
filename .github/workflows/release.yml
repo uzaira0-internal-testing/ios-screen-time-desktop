@@ -7,9 +7,11 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build:
+    environment: artifact-signing
     strategy:
       fail-fast: false
       matrix:
@@ -76,27 +78,50 @@ jobs:
             [[ "$REQUIRE_SIGNING" != true ]] || { echo "::error::notarization credentials are required to release"; exit 1; }
             echo "::warning::no notarization credentials; the macOS build is signed but not notarized"
           fi
+      - name: Sign in to Azure for Artifact Signing
+        if: runner.os == 'Windows' && vars.AZURE_ARTIFACT_SIGNING_CLIENT_ID != ''
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43
+        with:
+          client-id: ${{ vars.AZURE_ARTIFACT_SIGNING_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Windows signing
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           REQUIRE_SIGNING: ${{ github.ref_type == 'tag' }}
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          AZURE_ARTIFACT_SIGNING_CLIENT_ID: ${{ vars.AZURE_ARTIFACT_SIGNING_CLIENT_ID }}
+          CLIENT_VERSION: 1.0.128
+          CLIENT_SHA256: 74bd7d27e6ce1051409c38d9b46bc8df0400ecd643d51ffbf2ac00869061e40b
         run: |
           $ErrorActionPreference = 'Stop'
-          if (-not $env:WINDOWS_CERTIFICATE) {
-            if ($env:REQUIRE_SIGNING -eq 'true') { Write-Output '::error::WINDOWS_CERTIFICATE is required to release'; exit 1 }
-            Write-Output '::warning::WINDOWS_CERTIFICATE is not set; the Windows build is unsigned'
+          if (-not $env:AZURE_ARTIFACT_SIGNING_CLIENT_ID) {
+            if ($env:REQUIRE_SIGNING -eq 'true') { Write-Output '::error::Azure Artifact Signing is required to release'; exit 1 }
+            Write-Output '::warning::Azure Artifact Signing is not configured; the Windows build is unsigned'
             exit 0
           }
-          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
-          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
-          Remove-Item $pfx
-          $conf = @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } }
-          $conf | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM src-tauri/tauri.windows.conf.json
+          $dir = Join-Path $env:RUNNER_TEMP 'artifact-signing'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $pkg = Join-Path $dir 'client.zip'
+          Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Microsoft.ArtifactSigning.Client/$env:CLIENT_VERSION" -OutFile $pkg
+          if ((Get-FileHash -Algorithm SHA256 $pkg).Hash -ne $env:CLIENT_SHA256) { throw 'Artifact Signing client hash mismatch' }
+          Expand-Archive -Path $pkg -DestinationPath (Join-Path $dir 'client')
+          $dlib = Join-Path $dir 'client\bin\x64\Azure.CodeSigning.Dlib.dll'
+          if (-not (Test-Path $dlib)) { throw "missing $dlib" }
+          $metadata = Join-Path $dir 'metadata.json'
+          @{
+            Endpoint = 'https://eus.codesigning.azure.net/'
+            CodeSigningAccountName = 'actoglancewin'
+            CertificateProfileName = 'actoglancepublic'
+            ExcludeCredentials = @('ManagedIdentityCredential', 'WorkloadIdentityCredential', 'SharedTokenCacheCredential', 'VisualStudioCredential', 'VisualStudioCodeCredential', 'AzurePowerShellCredential', 'AzureDeveloperCliCredential', 'InteractiveBrowserCredential')
+          } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM $metadata
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' |
+            Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1
+          if (-not $signtool) { throw 'signtool.exe not found' }
+          $signArgs = @('sign', '/v', '/fd', 'SHA256', '/tr', 'http://timestamp.acs.microsoft.com', '/td', 'SHA256', '/dlib', $dlib, '/dmdf', $metadata, '/d', 'iOS Screen Time', '%1')
+          $conf = @{ bundle = @{ windows = @{ signCommand = @{ cmd = $signtool.FullName; args = $signArgs } } } }
+          $conf | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8NoBOM src-tauri/tauri.windows.conf.json
+          'WINDOWS_SIGNED=true' | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,3 +132,15 @@ jobs:
           releaseName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
           args: ${{ matrix.args }}
+      - name: Verify Windows signatures
+        if: runner.os == 'Windows' && env.WINDOWS_SIGNED == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(Get-ChildItem src-tauri/target/release -File -Filter '*.exe') + @(Get-ChildItem src-tauri/target/release/bundle -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' })
+          if ($files.Count -lt 3) { throw "expected the app and both installers, found $($files.Count) files" }
+          foreach ($file in $files) {
+            $sig = Get-AuthenticodeSignature -FilePath $file.FullName
+            if ($sig.Status -ne 'Valid') { throw "$($file.Name): $($sig.Status) $($sig.StatusMessage)" }
+            Write-Output "$($file.Name): $($sig.SignerCertificate.Subject)"
+          }
